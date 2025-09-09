@@ -38,9 +38,9 @@ def load_terms_from_uploader(uploaded_file):
     """Loads a list of terms from a Streamlit UploadedFile object."""
     if uploaded_file is None:
         return []
-    # Use io.StringIO to treat the string data as a file
     stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
     terms = [line.strip() for line in stringio if line.strip()]
+    # Sort by length descending to match longer phrases first (e.g., "Data Quality" before "Data")
     terms.sort(key=len, reverse=True)
     return terms
 
@@ -59,6 +59,7 @@ def analyze_page(url):
         return None, "Fetch Error"
 
 def get_deployment_type(soup):
+    """Determines deployment type from parsed HTML based on specific class labels."""
     if not soup: return "Analysis Error"
     has_cloud = soup.find('p', class_='cloud-label') is not None
     has_on_prem = soup.find('p', class_='on-prem-label') is not None
@@ -67,28 +68,58 @@ def get_deployment_type(soup):
     if has_on_prem: return "Customer Managed"
     return ""
 
-def map_metadata(text_content, term_list):
-    if not text_content or not term_list: return ""
+def map_metadata(text_content, term_list, top_n=3):
+    """
+    Finds the top_n most relevant terms from a list based on their frequency in the page content.
+    This prevents matching every possible term and provides more accurate results.
+    """
+    if not text_content or not term_list:
+        return ""
+    
     text_lower = text_content.lower()
-    found_terms = [term for term in term_list if re.search(r'\b' + re.escape(term.lower()) + r'\b', text_lower)]
-    return ', '.join(found_terms)
+    term_counts = {}
+    for term in term_list:
+        # Find all non-overlapping matches for the term as a whole word
+        matches = re.findall(r'\b' + re.escape(term.lower()) + r'\b', text_lower)
+        if matches:
+            term_counts[term] = len(matches)
+    
+    if not term_counts:
+        return ""
+    
+    # Sort the found terms by their frequency (the count), descending
+    sorted_terms = sorted(term_counts.items(), key=lambda item: item[1], reverse=True)
+    
+    # Get the names of the top N most frequent terms
+    top_terms = [term for term, count in sorted_terms[:top_n]]
+    
+    return ', '.join(top_terms)
 
 def extract_keywords(soup, title):
+    """Extracts keywords by analyzing word frequency in the main content area."""
     if not soup: return "Analysis Error"
+    
+    # Isolate the main content area to avoid analyzing navigation, headers, etc.
     content_area = soup.find('article') or soup.find('main') or soup.body
     if not content_area: return "No Content Found"
+
+    # Clean the content by removing script, style, and common boilerplate tags
+    for element in content_area(['script', 'style', 'nav', 'header', 'footer']):
+        element.decompose()
     
-    text = content_area.get_text()
+    text = content_area.get_text(separator=' ')
     words = re.findall(r'\b[a-z-]{3,}\b', text.lower())
     filtered_words = [word for word in words if word not in EXCLUSION_LIST]
     word_counts = Counter(filtered_words)
     top_keywords = [word for word, count in word_counts.most_common(20)]
 
+    # Special handling for OCF Connector pages
     if "ocf connector" in title.lower():
         match = re.search(r'(\w+)\s+ocf\s+connector', title.lower())
         if match:
             connector_name = match.group(1).capitalize()
             connector_keywords = [f"{connector_name} OCF Connector", f"{connector_name} data source"]
+            # Prepend connector keywords and ensure the list is unique and 20 items long
             final_keywords = connector_keywords + [kw for kw in top_keywords if kw not in connector_keywords]
             top_keywords = final_keywords[:20]
 
@@ -137,12 +168,14 @@ if st.button("🚀 Run Analysis", type="primary"):
             soup, title = analyze_page(url)
             if soup:
                 deployment_type = get_deployment_type(soup)
-                keywords = extract_keywords(soup, title)
                 content_text = (soup.find('article') or soup.find('main') or soup.body).get_text()
                 
-                mapped_roles = map_metadata(content_text, roles_list)
-                mapped_areas = map_metadata(content_text, areas_list)
-                mapped_topics = map_metadata(content_text, topics_list)
+                # Apply the improved mapping logic with appropriate limits
+                mapped_roles = map_metadata(content_text, roles_list, top_n=3)
+                mapped_areas = map_metadata(content_text, areas_list, top_n=1) # Usually only one functional area is primary
+                mapped_topics = map_metadata(content_text, topics_list, top_n=5)
+                
+                keywords = extract_keywords(soup, title)
 
                 results.append({
                     'Page Title': title,
@@ -159,9 +192,8 @@ if st.button("🚀 Run Analysis", type="primary"):
                     'User Role': '', 'Functional Area': '', 'Topics': '', 'Keywords': ''
                 })
         
-        # Store results in session state to persist them
         st.session_state.report_df = pd.DataFrame(results)
-        progress_bar.empty() # Clear the progress bar
+        progress_bar.empty()
         st.success("✅ Analysis complete!")
 
     else:
@@ -173,7 +205,6 @@ if 'report_df' in st.session_state:
     
     st.dataframe(st.session_state.report_df)
     
-    # Convert DataFrame to CSV for downloading
     csv_data = st.session_state.report_df.to_csv(index=False).encode('utf-8-sig')
     
     st.download_button(
