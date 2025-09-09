@@ -1,21 +1,31 @@
-# Content Analysis and Keyword Extraction App
+# URL to Deployment Type Mapper - Web Application
 
-This Streamlit application automates the process of content analysis for a list of URLs.
+This repository contains a Streamlit web application that provides a reliable way to scrape a list of URLs and determine their deployment type based on specific HTML class labels. It is designed as the first step in a two-part content analysis workflow.
 
-## How to Use
+## Purpose
 
-1. Upload Files: Use the sidebar to upload the four required .txt files:
+The primary goal of this application is to automate the deterministic task of identifying deployment types (Alation Cloud Service, Customer Managed, or both) for a large number of documentation pages.
 
-    - A list of URLs to analyze.
+It generates a clean CSV report containing the Page Title, URL, and the correctly mapped Deployment Type. This report can then be used as a reliable input for a second-stage analysis, where an LLM like Google Gemini can be prompted to perform more complex tasks like keyword generation and contextual metadata mapping.
 
-    - A list of possible Topics.
+## Features
 
-    - A list of possible Functional Areas.
+- User-Friendly Interface: A simple web UI for uploading files and running the analysis.
 
-    - A list of possible User Roles.
+- Reliable Scraping: Uses a consistent method to fetch live page data and identify deployment labels.
 
-2. Run Analysis: Click the "Run Analysis" button to start the process.
+- Batch Processing: Analyzes a list of URLs from a .txt file in a single run.
 
-3. Download Report: Once the analysis is complete, you can view the results in a table and download the full report as a CSV file.
+- Downloadable Reports: Provides the results in a clean, downloadable CSV format.
 
-**Note**: This application is built with Python and Streamlit.
+## How to Use the Deployed Application
+
+1. Prepare your URL file: Create a `.txt` file that contains the list of URLs you want to analyze. Each URL should be on a new line.
+
+2. Access the App: Open the public URL provided by Streamlit.
+
+3. Upload the file: In the application's sidebar, click "Browse files" and select your .txt file.
+
+4. Run the analysis: Click the "Map Deployment Types" button. The application will show a progress bar as it processes each URL.
+
+5. Download the results: Once the analysis is complete, a table with the results will appear. Click the "Download Report as CSV" button to save the data for your next analysis step.
