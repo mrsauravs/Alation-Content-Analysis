@@ -35,7 +35,6 @@ def get_deployment_type_from_scraping(soup):
 
 # --- LLM Analysis Functions ---
 
-@st.cache_data
 def get_deployment_type_with_llm(_client, soup):
     """Uses an LLM to infer deployment type if scraping fails."""
     if not soup: return "Analysis Error"
@@ -54,7 +53,6 @@ def get_deployment_type_with_llm(_client, soup):
     except Exception:
         return "LLM API Error"
 
-@st.cache_data
 def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
     """Uses an LLM for metadata mapping."""
     if not soup: return {}
@@ -91,7 +89,6 @@ def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
     except Exception:
         return {"error": "LLM API Error"}
 
-@st.cache_data
 def get_keywords_with_llm(_client, soup, page_title):
     """Uses an LLM for keyword generation, with special logic for OCF Connectors."""
     if not soup: return {}
