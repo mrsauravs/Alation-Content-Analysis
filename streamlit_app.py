@@ -185,7 +185,7 @@ elif app_mode == "Step 2: Map Metadata":
     with st.sidebar:
         csv_file_step2 = st.file_uploader("Upload Deployment Report (.csv)", type="csv", key="step2_csv_uploader")
         topics_file = st.file_uploader("Upload Topics File (.txt)", type="txt", key="step2_topics")
-        areas_file = st.file_uploader("Upload Functional Areas File (.txt)", type="txt", "step2_areas")
+        areas_file = st.file_uploader("Upload Functional Areas File (.txt)", type="txt", key="step2_areas")
         roles_file = st.file_uploader("Upload User Roles File (.txt)", type="txt", key="step2_roles")
 
     if st.button("🚀 Map Metadata", type="primary", disabled=(not HF_TOKEN)):
