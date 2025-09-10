@@ -9,8 +9,7 @@ import json
 import time
 
 # --- Configuration ---
-PRIMARY_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"
-FALLBACK_MODEL = "HuggingFaceH4/zephyr-7b-beta"
+STABLE_MODEL = "google/flan-t5-xxl"
 
 # --- Utility and Scraping Functions ---
 
@@ -38,27 +37,23 @@ def get_deployment_type_from_scraping(soup):
     if has_on_prem: return "Customer Managed"
     return ""
 
-# --- LLM Analysis Functions with Retry and Fallback Logic ---
+# --- LLM Analysis Functions with Retry Logic ---
 
-def call_llm_with_fallback(client, prompt, max_tokens):
-    """Calls the LLM with a primary model, and falls back to a secondary model on persistent failure."""
-    models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
+def call_llm_with_retry(client, prompt, max_tokens):
+    """Calls the LLM with a stable model and retries on failure."""
+    for attempt in range(3):
+        try:
+            response = client.text_generation(prompt, model=STABLE_MODEL, max_new_tokens=max_tokens)
+            return response
+        except Exception as e:
+            error_message = str(e)
+            if attempt < 2:
+                st.warning(f"API call with {STABLE_MODEL} failed (attempt {attempt + 1}/3): {error_message}. Retrying...")
+                time.sleep(5)
+            else:
+                st.error(f"All retries failed for model {STABLE_MODEL}: {error_message}")
     
-    for model in models_to_try:
-        for attempt in range(3):
-            try:
-                # Set a longer timeout for the API call itself
-                response = client.text_generation(prompt, model=model, max_new_tokens=max_tokens)
-                return response
-            except Exception as e:
-                error_message = str(e)
-                if attempt < 2:
-                    st.warning(f"API call with {model} failed (attempt {attempt + 1}/3): {error_message}. Retrying...")
-                    time.sleep(5)
-                else:
-                    st.error(f"All retries failed for model {model}: {error_message}")
-    
-    raise Exception("LLM API Error: All models and retries failed.")
+    raise Exception("LLM API Error: All retries failed.")
 
 
 def get_deployment_type_with_llm(_client, soup):
@@ -72,7 +67,7 @@ def get_deployment_type_with_llm(_client, soup):
     Based on the content, the correct deployment type is:"""
     
     try:
-        response = call_llm_with_fallback(_client, prompt, max_tokens=20)
+        response = call_llm_with_retry(_client, prompt, max_tokens=20)
         cleaned_response = response.strip()
         valid_responses = ["Alation Cloud Service", "Customer Managed", "Alation Cloud Service, Customer Managed"]
         return f"{cleaned_response} (Inferred by LLM)" if cleaned_response in valid_responses else "LLM Inference Failed"
@@ -99,7 +94,7 @@ def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
     """
     
     try:
-        response_text = call_llm_with_fallback(_client, prompt, max_tokens=256)
+        response_text = call_llm_with_retry(_client, prompt, max_tokens=256)
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
             return json.loads(json_match.group(0))
@@ -130,7 +125,7 @@ def get_keywords_with_llm(_client, soup, page_title):
     """
     
     try:
-        response_text = call_llm_with_fallback(_client, prompt, max_tokens=512)
+        response_text = call_llm_with_retry(_client, prompt, max_tokens=512)
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
             return json.loads(json_match.group(0))
