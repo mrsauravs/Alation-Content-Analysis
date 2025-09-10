@@ -9,7 +9,7 @@ import json
 import time
 
 # --- Configuration ---
-STABLE_MODEL = "google/flan-t5-xxl"
+STABLE_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"
 
 # --- Utility and Scraping Functions ---
 
@@ -37,14 +37,15 @@ def get_deployment_type_from_scraping(soup):
     if has_on_prem: return "Customer Managed"
     return ""
 
-# --- LLM Analysis Functions with Retry Logic ---
+# --- LLM Analysis Functions using Conversational API ---
 
 def call_llm_with_retry(client, prompt, max_tokens):
-    """Calls the LLM with a stable model and retries on failure."""
+    """Calls the LLM's chat endpoint with a stable model and retries on failure."""
+    messages = [{"role": "user", "content": prompt}]
     for attempt in range(3):
         try:
-            response = client.text_generation(prompt, model=STABLE_MODEL, max_new_tokens=max_tokens)
-            return response
+            response = client.chat_completion(messages, model=STABLE_MODEL, max_new_tokens=max_tokens)
+            return response.choices[0].message.content
         except Exception as e:
             error_message = str(e)
             if attempt < 2:
