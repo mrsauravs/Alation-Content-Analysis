@@ -44,7 +44,7 @@ def call_llm_with_retry(client, prompt, max_tokens):
     messages = [{"role": "user", "content": prompt}]
     for attempt in range(3):
         try:
-            response = client.chat_completion(messages, model=STABLE_MODEL, max_new_tokens=max_tokens)
+            response = client.chat_completion(messages, model=STABLE_MODEL, max_tokens=max_tokens)
             return response.choices[0].message.content
         except Exception as e:
             error_message = str(e)
