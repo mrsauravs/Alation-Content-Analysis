@@ -46,7 +46,7 @@ def get_deployment_type_with_llm(_client, soup):
     Based on the content, the correct deployment type is:"""
     
     try:
-        response = _client.text_generation(prompt, model="mistralai/Mixtral-8x7B-Instruct-v0.1", max_new_tokens=20)
+        response = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=20)
         cleaned_response = response.strip()
         valid_responses = ["Alation Cloud Service", "Customer Managed", "Alation Cloud Service, Customer Managed"]
         return f"{cleaned_response} (Inferred by LLM)" if cleaned_response in valid_responses else "LLM Inference Failed"
@@ -81,7 +81,7 @@ def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
     """
     
     try:
-        response_text = _client.text_generation(prompt, model="mistralai/Mixtral-8x7B-Instruct-v0.1", max_new_tokens=256)
+        response_text = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=256)
         
         if "```json" in response_text:
             response_text = response_text.split("```json")[1]
@@ -125,7 +125,7 @@ def get_keywords_with_llm(_client, soup, page_title):
     """
     
     try:
-        response_text = _client.text_generation(prompt, model="mistralai/Mixtral-8x7B-Instruct-v0.1", max_new_tokens=512)
+        response_text = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=512)
 
         if "```json" in response_text:
             response_text = response_text.split("```json")[1]
