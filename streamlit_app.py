@@ -8,6 +8,10 @@ import re
 import json
 import time
 
+# --- Configuration ---
+PRIMARY_MODEL = "mistralai/Mistral-7B-Instruct-v0.1"
+FALLBACK_MODEL = "HuggingFaceH4/zephyr-7b-beta"
+
 # --- Utility and Scraping Functions ---
 
 @st.cache_data
@@ -15,7 +19,7 @@ def analyze_page_content(url):
     """Fetches and parses a URL for title and main content analysis."""
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        response = requests.get(url, headers=headers, timeout=20)
+        response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         title = soup.find('title').get_text().strip() if soup.find('title') else 'No Title Found'
@@ -34,10 +38,31 @@ def get_deployment_type_from_scraping(soup):
     if has_on_prem: return "Customer Managed"
     return ""
 
-# --- LLM Analysis Functions ---
+# --- LLM Analysis Functions with Retry and Fallback Logic ---
+
+def call_llm_with_fallback(client, prompt, max_tokens):
+    """Calls the LLM with a primary model, and falls back to a secondary model on persistent failure."""
+    models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
+    
+    for model in models_to_try:
+        for attempt in range(3):
+            try:
+                # Set a longer timeout for the API call itself
+                response = client.text_generation(prompt, model=model, max_new_tokens=max_tokens)
+                return response
+            except Exception as e:
+                error_message = str(e)
+                if attempt < 2:
+                    st.warning(f"API call with {model} failed (attempt {attempt + 1}/3): {error_message}. Retrying...")
+                    time.sleep(5)
+                else:
+                    st.error(f"All retries failed for model {model}: {error_message}")
+    
+    raise Exception("LLM API Error: All models and retries failed.")
+
 
 def get_deployment_type_with_llm(_client, soup):
-    """Uses an LLM to infer deployment type if scraping fails, with retries."""
+    """Uses an LLM to infer deployment type if scraping fails."""
     if not soup: return "Analysis Error"
     main_content = soup.find('article') or soup.find('main') or soup.body
     content_text = main_content.get_text(separator=' ', strip=True)[:15000] if main_content else ""
@@ -46,22 +71,16 @@ def get_deployment_type_with_llm(_client, soup):
     Content: --- {content_text} ---
     Based on the content, the correct deployment type is:"""
     
-    for attempt in range(3):
-        try:
-            response = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=20)
-            cleaned_response = response.strip()
-            valid_responses = ["Alation Cloud Service", "Customer Managed", "Alation Cloud Service, Customer Managed"]
-            return f"{cleaned_response} (Inferred by LLM)" if cleaned_response in valid_responses else "LLM Inference Failed"
-        except Exception as e:
-            if attempt < 2:
-                st.warning(f"LLM API call failed (attempt {attempt + 1}/3). Retrying in 3 seconds...")
-                time.sleep(3)
-            else:
-                return f"LLM API Error after 3 attempts: {str(e)}"
-    return "LLM API Error: All retries failed."
+    try:
+        response = call_llm_with_fallback(_client, prompt, max_tokens=20)
+        cleaned_response = response.strip()
+        valid_responses = ["Alation Cloud Service", "Customer Managed", "Alation Cloud Service, Customer Managed"]
+        return f"{cleaned_response} (Inferred by LLM)" if cleaned_response in valid_responses else "LLM Inference Failed"
+    except Exception as e:
+        return f"LLM API Error: {str(e)}"
 
 def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
-    """Uses an LLM for metadata mapping, with retries."""
+    """Uses an LLM for metadata mapping."""
     if not soup: return {}
     main_content = soup.find('article') or soup.find('main') or soup.body
     content_text = main_content.get_text(separator=' ', strip=True)[:15000] if main_content else ""
@@ -74,42 +93,22 @@ def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
     **Available Functional Areas:** {', '.join(areas)}
     **Available Topics:** {', '.join(topics)}
 
-    **Content to Analyze:**
-    ---
-    {content_text}
-    ---
+    **Content to Analyze:** --- {content_text} ---
     
-    Provide your response in a single JSON object format like this example:
-    {{
-      "user_role": "Steward, Catalog Admin",
-      "functional_area": "Data Quality",
-      "topics": "Data Quality Monitors, Troubleshooting"
-    }}
+    Provide your response in a single JSON object format like this example: {{"user_role": "Steward, Catalog Admin", "functional_area": "Data Quality", "topics": "Data Quality Monitors, Troubleshooting"}}
     """
     
-    for attempt in range(3):
-        try:
-            response_text = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=256)
-            
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1]
-            if "```" in response_text:
-                response_text = response_text.split("```")[0]
-            
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group(0))
-            return {"error": f"Failed to parse LLM response: {response_text[:200]}..."}
-        except Exception as e:
-            if attempt < 2:
-                st.warning(f"LLM API call failed (attempt {attempt + 1}/3). Retrying in 3 seconds...")
-                time.sleep(3)
-            else:
-                return {"error": f"LLM API Error after 3 attempts: {str(e)}"}
-    return {"error": "LLM API Error: All retries failed."}
+    try:
+        response_text = call_llm_with_fallback(_client, prompt, max_tokens=256)
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group(0))
+        return {"error": "Failed to parse LLM response"}
+    except Exception as e:
+        return {"error": f"LLM API Error: {str(e)}"}
 
 def get_keywords_with_llm(_client, soup, page_title):
-    """Uses an LLM for keyword generation, with special logic for OCF Connectors and retries."""
+    """Uses an LLM for keyword generation, with special logic for OCF Connectors."""
     if not soup: return {}
     main_content = soup.find('article') or soup.find('main') or soup.body
     content_text = main_content.get_text(separator=' ', strip=True)[:15000] if main_content else ""
@@ -118,45 +117,26 @@ def get_keywords_with_llm(_client, soup, page_title):
     if "OCF Connector" in page_title:
         connector_name = page_title.split('|')[0].strip()
         db_system = connector_name.replace("OCF Connector", "").strip()
-        connector_instructions = f"""**Critical Rule:** This page is about an OCF Connector. The keywords MUST include both "{connector_name}" and "{db_system} data source"."""
+        connector_instructions = f'**Critical Rule:** This page is about an OCF Connector. The keywords MUST include both "{connector_name}" and "{db_system} data source".'
 
     prompt = f"""
-    You are an expert content analyst. Analyze the provided technical documentation content.
-    Your task is to generate exactly 20 unique, comma-separated technical keywords.
+    You are an expert content analyst. Analyze the provided technical documentation content to generate exactly 20 unique, comma-separated technical keywords.
     **Exclusion Rules:** Exclude generic words like 'guide', 'documentation', 'button', 'click', 'data', 'alation', 'prerequisites', 'overview', 'steps'.
     {connector_instructions}
 
-    **Content to Analyze:**
-    ---
-    {content_text}
-    ---
+    **Content to Analyze:** --- {content_text} ---
     
-    Provide your response in a single JSON object format like this example:
-    {{
-      "keywords": "keyword1, keyword2, keyword3, keyword4, keyword5, keyword6, keyword7, keyword8, keyword9, keyword10, keyword11, keyword12, keyword13, keyword14, keyword15, keyword16, keyword17, keyword18, keyword19, keyword20"
-    }}
+    Provide your response in a single JSON object format like this example: {{"keywords": "keyword1, keyword2, ..., keyword20"}}
     """
     
-    for attempt in range(3):
-        try:
-            response_text = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=512)
-
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1]
-            if "```" in response_text:
-                response_text = response_text.split("```")[0]
-
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group(0))
-            return {"error": f"Failed to parse LLM response: {response_text[:200]}..."}
-        except Exception as e:
-            if attempt < 2:
-                st.warning(f"LLM API call failed (attempt {attempt + 1}/3). Retrying in 3 seconds...")
-                time.sleep(3)
-            else:
-                return {"error": f"LLM API Error after 3 attempts: {str(e)}"}
-    return {"error": "LLM API Error: All retries failed."}
+    try:
+        response_text = call_llm_with_fallback(_client, prompt, max_tokens=512)
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group(0))
+        return {"error": "Failed to parse LLM response"}
+    except Exception as e:
+        return {"error": f"LLM API Error: {str(e)}"}
 
 # --- Streamlit UI ---
 
@@ -165,7 +145,7 @@ st.title("📄 Intelligent Content Analysis Workflow")
 
 try:
     HF_TOKEN = st.secrets["HUGGING_FACE_TOKEN"]
-except KeyError:
+except (KeyError, FileNotFoundError):
     st.error("HUGGING_FACE_TOKEN secret not found. Please add it to your Streamlit Cloud deployment settings.")
     HF_TOKEN = None
 
