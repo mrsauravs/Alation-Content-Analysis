@@ -6,6 +6,7 @@ import io
 from huggingface_hub import InferenceClient
 import re
 import json
+import time
 
 # --- Utility and Scraping Functions ---
 
@@ -36,7 +37,7 @@ def get_deployment_type_from_scraping(soup):
 # --- LLM Analysis Functions ---
 
 def get_deployment_type_with_llm(_client, soup):
-    """Uses an LLM to infer deployment type if scraping fails."""
+    """Uses an LLM to infer deployment type if scraping fails, with retries."""
     if not soup: return "Analysis Error"
     main_content = soup.find('article') or soup.find('main') or soup.body
     content_text = main_content.get_text(separator=' ', strip=True)[:15000] if main_content else ""
@@ -45,16 +46,22 @@ def get_deployment_type_with_llm(_client, soup):
     Content: --- {content_text} ---
     Based on the content, the correct deployment type is:"""
     
-    try:
-        response = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=20)
-        cleaned_response = response.strip()
-        valid_responses = ["Alation Cloud Service", "Customer Managed", "Alation Cloud Service, Customer Managed"]
-        return f"{cleaned_response} (Inferred by LLM)" if cleaned_response in valid_responses else "LLM Inference Failed"
-    except Exception as e:
-        return f"LLM API Error: {str(e)}"
+    for attempt in range(3):
+        try:
+            response = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=20)
+            cleaned_response = response.strip()
+            valid_responses = ["Alation Cloud Service", "Customer Managed", "Alation Cloud Service, Customer Managed"]
+            return f"{cleaned_response} (Inferred by LLM)" if cleaned_response in valid_responses else "LLM Inference Failed"
+        except Exception as e:
+            if attempt < 2:
+                st.warning(f"LLM API call failed (attempt {attempt + 1}/3). Retrying in 3 seconds...")
+                time.sleep(3)
+            else:
+                return f"LLM API Error after 3 attempts: {str(e)}"
+    return "LLM API Error: All retries failed."
 
 def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
-    """Uses an LLM for metadata mapping."""
+    """Uses an LLM for metadata mapping, with retries."""
     if not soup: return {}
     main_content = soup.find('article') or soup.find('main') or soup.body
     content_text = main_content.get_text(separator=' ', strip=True)[:15000] if main_content else ""
@@ -80,23 +87,29 @@ def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
     }}
     """
     
-    try:
-        response_text = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=256)
-        
-        if "```json" in response_text:
-            response_text = response_text.split("```json")[1]
-        if "```" in response_text:
-            response_text = response_text.split("```")[0]
-        
-        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group(0))
-        return {"error": f"Failed to parse LLM response: {response_text[:200]}..."}
-    except Exception as e:
-        return {"error": f"LLM API Error: {str(e)}"}
+    for attempt in range(3):
+        try:
+            response_text = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=256)
+            
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1]
+            if "```" in response_text:
+                response_text = response_text.split("```")[0]
+            
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group(0))
+            return {"error": f"Failed to parse LLM response: {response_text[:200]}..."}
+        except Exception as e:
+            if attempt < 2:
+                st.warning(f"LLM API call failed (attempt {attempt + 1}/3). Retrying in 3 seconds...")
+                time.sleep(3)
+            else:
+                return {"error": f"LLM API Error after 3 attempts: {str(e)}"}
+    return {"error": "LLM API Error: All retries failed."}
 
 def get_keywords_with_llm(_client, soup, page_title):
-    """Uses an LLM for keyword generation, with special logic for OCF Connectors."""
+    """Uses an LLM for keyword generation, with special logic for OCF Connectors and retries."""
     if not soup: return {}
     main_content = soup.find('article') or soup.find('main') or soup.body
     content_text = main_content.get_text(separator=' ', strip=True)[:15000] if main_content else ""
@@ -124,20 +137,26 @@ def get_keywords_with_llm(_client, soup, page_title):
     }}
     """
     
-    try:
-        response_text = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=512)
+    for attempt in range(3):
+        try:
+            response_text = _client.text_generation(prompt, model="mistralai/Mistral-7B-Instruct-v0.1", max_new_tokens=512)
 
-        if "```json" in response_text:
-            response_text = response_text.split("```json")[1]
-        if "```" in response_text:
-            response_text = response_text.split("```")[0]
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1]
+            if "```" in response_text:
+                response_text = response_text.split("```")[0]
 
-        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group(0))
-        return {"error": f"Failed to parse LLM response: {response_text[:200]}..."}
-    except Exception as e:
-        return {"error": f"LLM API Error: {str(e)}"}
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group(0))
+            return {"error": f"Failed to parse LLM response: {response_text[:200]}..."}
+        except Exception as e:
+            if attempt < 2:
+                st.warning(f"LLM API call failed (attempt {attempt + 1}/3). Retrying in 3 seconds...")
+                time.sleep(3)
+            else:
+                return {"error": f"LLM API Error after 3 attempts: {str(e)}"}
+    return {"error": "LLM API Error: All retries failed."}
 
 # --- Streamlit UI ---
 
