@@ -50,8 +50,8 @@ def get_deployment_type_with_llm(_client, soup):
         cleaned_response = response.strip()
         valid_responses = ["Alation Cloud Service", "Customer Managed", "Alation Cloud Service, Customer Managed"]
         return f"{cleaned_response} (Inferred by LLM)" if cleaned_response in valid_responses else "LLM Inference Failed"
-    except Exception:
-        return "LLM API Error"
+    except Exception as e:
+        return f"LLM API Error: {str(e)}"
 
 def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
     """Uses an LLM for metadata mapping."""
@@ -82,12 +82,18 @@ def get_metadata_analysis_with_llm(_client, soup, roles, areas, topics):
     
     try:
         response_text = _client.text_generation(prompt, model="mistralai/Mixtral-8x7B-Instruct-v0.1", max_new_tokens=256)
+        
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1]
+        if "```" in response_text:
+            response_text = response_text.split("```")[0]
+        
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
             return json.loads(json_match.group(0))
-        return {"error": "Failed to parse LLM response"}
-    except Exception:
-        return {"error": "LLM API Error"}
+        return {"error": f"Failed to parse LLM response: {response_text[:200]}..."}
+    except Exception as e:
+        return {"error": f"LLM API Error: {str(e)}"}
 
 def get_keywords_with_llm(_client, soup, page_title):
     """Uses an LLM for keyword generation, with special logic for OCF Connectors."""
@@ -120,12 +126,18 @@ def get_keywords_with_llm(_client, soup, page_title):
     
     try:
         response_text = _client.text_generation(prompt, model="mistralai/Mixtral-8x7B-Instruct-v0.1", max_new_tokens=512)
+
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1]
+        if "```" in response_text:
+            response_text = response_text.split("```")[0]
+
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
             return json.loads(json_match.group(0))
-        return {"error": "Failed to parse LLM response"}
-    except Exception:
-        return {"error": "LLM API Error"}
+        return {"error": f"Failed to parse LLM response: {response_text[:200]}..."}
+    except Exception as e:
+        return {"error": f"LLM API Error: {str(e)}"}
 
 # --- Streamlit UI ---
 
@@ -197,9 +209,10 @@ elif app_mode == "Step 2: Map Metadata":
                 soup, _ = analyze_page_content(row['Page URL'])
                 if soup:
                     llm_data = get_metadata_analysis_with_llm(client, soup, roles, areas, topics)
-                    row['User Role'] = llm_data.get('user_role', 'Error')
-                    row['Functional Area'] = llm_data.get('functional_area', 'Error')
-                    row['Topics'] = llm_data.get('topics', 'Error')
+                    error_msg = llm_data.get('error', 'Unknown LLM Error')
+                    row['User Role'] = llm_data.get('user_role', error_msg)
+                    row['Functional Area'] = llm_data.get('functional_area', error_msg)
+                    row['Topics'] = llm_data.get('topics', error_msg)
                 else:
                     row['User Role'], row['Functional Area'], row['Topics'] = 'Fetch Error', 'Fetch Error', 'Fetch Error'
                 analysis_results.append(row)
@@ -234,7 +247,8 @@ elif app_mode == "Step 3: Generate Keywords":
                 soup, title = analyze_page_content(row['Page URL'])
                 if soup:
                     llm_data = get_keywords_with_llm(client, soup, title)
-                    row['Keywords'] = llm_data.get('keywords', 'Error')
+                    error_msg = llm_data.get('error', 'Unknown LLM Error')
+                    row['Keywords'] = llm_data.get('keywords', error_msg)
                 else:
                     row['Keywords'] = 'Fetch Error'
                 analysis_results.append(row)
