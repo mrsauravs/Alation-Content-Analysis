@@ -138,20 +138,14 @@ def is_standalone_word(text, match):
 def find_items_in_text(text, items):
     """Finds which items (roles, topics) from a list are present in the text."""
     if not isinstance(text, str): return ""
-    
-    # CORRECTED LOGIC: Use a standard for-loop to avoid the UnboundLocalError
     found_items = []
     for item in items:
-        # Optimization: if an item is already found, no need to search for it again
         if item in found_items:
             continue
-            
         for match in re.finditer(r'\b' + re.escape(item) + r'\b', text, re.IGNORECASE):
             if is_standalone_word(text, match):
                 found_items.append(item)
-                # Once found, break the inner loop to move to the next item
                 break
-                
     return ", ".join(found_items) if found_items else ""
 
 # --- AI Enrichment Functions ---
@@ -235,12 +229,13 @@ st.set_page_config(layout="wide")
 st.title("📄 Web Content and Topic Mapper")
 st.markdown("A four-step tool to scrape, map, and enrich content using AI.")
 
-# Initialize session state dataframes
+# Initialize session state dataframes if they don't exist
 if 'df1' not in st.session_state: st.session_state.df1 = pd.DataFrame()
 if 'df2' not in st.session_state: st.session_state.df2 = pd.DataFrame()
 if 'df3' not in st.session_state: st.session_state.df3 = pd.DataFrame()
 if 'df4' not in st.session_state: st.session_state.df4 = pd.DataFrame()
 
+# --- UI Step 1: Map Deployment Type ---
 with st.expander("Step 1: Map Deployment Type", expanded=True):
     urls_file = st.file_uploader("Upload URLs File (.txt)", key="step1")
     if st.button("🚀 Scrape URLs", type="primary"):
@@ -258,100 +253,95 @@ with st.expander("Step 1: Map Deployment Type", expanded=True):
                 results.append(data)
             
             st.session_state.df1 = pd.DataFrame(results)
+            # Reset subsequent steps
             st.session_state.df2, st.session_state.df3, st.session_state.df4 = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
             st.success("✅ Step 1 complete!")
         else:
             st.warning("⚠️ Please upload a URLs file.")
 
-if not st.session_state.df1.empty:
-    with st.expander("Step 2: Map User Roles", expanded=True):
-        roles_file = st.file_uploader("Upload User Roles File (.txt)", key="step2")
-        if st.button("🗺️ Map User Roles"):
-            if roles_file:
-                roles = [line.strip() for line in io.StringIO(roles_file.getvalue().decode("utf-8")) if line.strip()]
-                if roles:
-                    df = st.session_state.df1.copy()
-                    df['User Roles'] = df['Page Content'].apply(lambda txt: find_items_in_text(txt, roles))
-                    st.session_state.df2 = df
-                    st.session_state.df3, st.session_state.df4 = pd.DataFrame(), pd.DataFrame()
-                    st.success("✅ Step 2 complete!")
-                else: st.warning("⚠️ Roles file is empty.")
-            else: st.warning("⚠️ Please upload a roles file.")
+# --- UI Step 2: Map User Roles ---
+with st.expander("Step 2: Map User Roles", expanded=True):
+    is_step2_disabled = st.session_state.df1.empty
+    if is_step2_disabled:
+        st.info("Complete Step 1 to enable this section.")
+    
+    roles_file = st.file_uploader("Upload User Roles File (.txt)", key="step2", disabled=is_step2_disabled)
+    if st.button("🗺️ Map User Roles", disabled=is_step2_disabled):
+        if roles_file:
+            roles = [line.strip() for line in io.StringIO(roles_file.getvalue().decode("utf-8")) if line.strip()]
+            if roles:
+                df = st.session_state.df1.copy()
+                df['User Role'] = df['Page Content'].apply(lambda txt: find_items_in_text(txt, roles))
+                st.session_state.df2 = df
+                st.session_state.df3, st.session_state.df4 = pd.DataFrame(), pd.DataFrame()
+                st.success("✅ Step 2 complete!")
+            else: st.warning("⚠️ Roles file is empty.")
+        else: st.warning("⚠️ Please upload a roles file.")
 
-if not st.session_state.df2.empty:
-    with st.expander("Step 3: Map Topics", expanded=True):
-        topics_file = st.file_uploader("Upload Topics File (.txt)", key="step3")
-        if st.button("🏷️ Map Topics"):
-            if topics_file:
-                topics = [line.strip() for line in io.StringIO(topics_file.getvalue().decode("utf-8")) if line.strip()]
-                if topics:
-                    df = st.session_state.df2.copy()
-                    df['Topics'] = df['Page Content'].apply(lambda txt: find_items_in_text(txt, topics))
-                    st.session_state.df3 = df
-                    st.session_state.df4 = pd.DataFrame()
-                    st.success("✅ Step 3 complete!")
-                else: st.warning("⚠️ Topics file is empty.")
-            else: st.warning("⚠️ Please upload a topics file.")
+# --- UI Step 3: Map Topics ---
+with st.expander("Step 3: Map Topics", expanded=True):
+    is_step3_disabled = st.session_state.df2.empty
+    if is_step3_disabled:
+        st.info("Complete Step 2 to enable this section.")
 
-if not st.session_state.df3.empty:
-    with st.expander("Step 4: Enrich Data with AI", expanded=True):
-        st.markdown("This final step uses an AI agent to fill in any remaining blank cells and generate new metadata columns.")
-        
-        ai_provider = st.selectbox("Choose AI Provider", ["Google Gemini", "OpenAI (GPT-4)", "Hugging Face"])
-        
-        api_key_label = "API Key"
-        if ai_provider == "Hugging Face":
-            api_key_label = "Hugging Face User Access Token"
+    topics_file = st.file_uploader("Upload Topics File (.txt)", key="step3", disabled=is_step3_disabled)
+    if st.button("🏷️ Map Topics", disabled=is_step3_disabled):
+        if topics_file:
+            topics = [line.strip() for line in io.StringIO(topics_file.getvalue().decode("utf-8")) if line.strip()]
+            if topics:
+                df = st.session_state.df2.copy()
+                df['Topics'] = df['Page Content'].apply(lambda txt: find_items_in_text(txt, topics))
+                st.session_state.df3 = df
+                st.session_state.df4 = pd.DataFrame()
+                st.success("✅ Step 3 complete!")
+            else: st.warning("⚠️ Topics file is empty.")
+        else: st.warning("⚠️ Please upload a topics file.")
 
-        api_key = st.text_input(f"Enter your {api_key_label}", type="password", help=f"Get your key/token from the {ai_provider} website.")
-        
-        hf_model_id = None
-        if ai_provider == "Hugging Face":
-            hf_model_id = st.text_input("Enter Hugging Face Model ID", help="e.g., mistralai/Mistral-7B-Instruct-v0.2")
+# --- UI Step 4: Enrich Data with AI ---
+with st.expander("Step 4: Enrich Data with AI", expanded=True):
+    is_step4_disabled = st.session_state.df3.empty
+    if is_step4_disabled:
+        st.info("Complete Step 3 to enable this section.")
 
-        if st.button("🤖 Fill Blanks with AI"):
-            if not api_key:
-                st.warning(f"Please enter your {api_key_label} to proceed.")
-            elif ai_provider == "Hugging Face" and not hf_model_id:
-                st.warning("Please enter a Hugging Face Model ID to proceed.")
-            else:
-                with st.spinner("AI is processing... This may take several minutes depending on the number of rows."):
-                    st.session_state.df4 = enrich_data_with_ai(st.session_state.df3, api_key, ai_provider, hf_model_id)
-                st.success("✅ AI enrichment complete! The final report is ready.")
+    ai_provider = st.selectbox("Choose AI Provider", ["Google Gemini", "OpenAI (GPT-4)", "Hugging Face"], disabled=is_step4_disabled)
+    
+    api_key_label = "API Key"
+    if ai_provider == "Hugging Face":
+        api_key_label = "Hugging Face User Access Token"
+
+    api_key = st.text_input(f"Enter your {api_key_label}", type="password", help=f"Get your key/token from the {ai_provider} website.", disabled=is_step4_disabled)
+    
+    hf_model_id = None
+    if ai_provider == "Hugging Face":
+        hf_model_id = st.text_input("Enter Hugging Face Model ID", help="e.g., mistralai/Mistral-7B-Instruct-v0.2", disabled=is_step4_disabled)
+
+    if st.button("🤖 Fill Blanks with AI", disabled=is_step4_disabled):
+        if not api_key:
+            st.warning(f"Please enter your {api_key_label} to proceed.")
+        elif ai_provider == "Hugging Face" and not hf_model_id:
+            st.warning("Please enter a Hugging Face Model ID to proceed.")
+        else:
+            with st.spinner("AI is processing... This may take several minutes depending on the number of rows."):
+                st.session_state.df4 = enrich_data_with_ai(st.session_state.df3, api_key, ai_provider, hf_model_id)
+            st.success("✅ AI enrichment complete! The final report is ready.")
 
 st.markdown("---")
 st.subheader("📊 Results")
 
-# Determine which dataframe to show and its final columns
+# Determine which dataframe to show
 df_to_show = pd.DataFrame()
-final_columns = ['Page Title', 'Page URL', 'Deployment Type', 'User Role', 'Topics', 'Functional Area', 'Keywords']
-initial_columns = ['Page Title', 'Page URL', 'Deployment Type', 'User Roles', 'Topics'] # Note: 'User Roles' vs 'User Role'
+if not st.session_state.df4.empty: df_to_show = st.session_state.df4
+elif not st.session_state.df3.empty: df_to_show = st.session_state.df3
+elif not st.session_state.df2.empty: df_to_show = st.session_state.df2
+elif not st.session_state.df1.empty: df_to_show = st.session_state.df1
 
-# Check for both 'User Role' and 'User Roles' for compatibility
-if 'User Roles' in st.session_state.get('df2', pd.DataFrame()).columns and 'User Role' not in st.session_state.get('df2', pd.DataFrame()).columns:
-    st.session_state.get('df2', pd.DataFrame()).rename(columns={'User Roles': 'User Role'}, inplace=True)
-if 'User Roles' in st.session_state.get('df3', pd.DataFrame()).columns and 'User Role' not in st.session_state.get('df3', pd.DataFrame()).columns:
-    st.session_state.get('df3', pd.DataFrame()).rename(columns={'User Roles': 'User Role'}, inplace=True)
-
-
-if 'df4' in st.session_state and not st.session_state.df4.empty:
-    df_to_show = st.session_state.df4
-    display_columns = [col for col in final_columns if col in df_to_show.columns]
-elif 'df3' in st.session_state and not st.session_state.df3.empty:
-    df_to_show = st.session_state.df3
-    display_columns = [col for col in final_columns if col in df_to_show.columns]
-elif 'df2' in st.session_state and not st.session_state.df2.empty:
-    df_to_show = st.session_state.df2
-    display_columns = [col for col in final_columns if col in df_to_show.columns]
-elif 'df1' in st.session_state and not st.session_state.df1.empty:
-    df_to_show = st.session_state.df1
-    display_columns = [col for col in final_columns if col in df_to_show.columns]
-
-
+# Define final columns and filter for display
 if not df_to_show.empty:
+    final_columns = ['Page Title', 'Page URL', 'Deployment Type', 'User Role', 'Functional Area', 'Topics', 'Keywords']
+    display_columns = [col for col in final_columns if col in df_to_show.columns]
+    
     st.dataframe(df_to_show[display_columns])
     csv_data = df_to_show[display_columns].to_csv(index=False).encode('utf-8-sig')
     st.download_button("📥 Download Report (CSV)", csv_data, "enriched_report.csv", "text/csv")
 else:
-    st.write("Upload a file in Step 1 and click 'Scrape URLs' to generate a report.")
-
+    st.write("Upload a file in Step 1 to begin.")
