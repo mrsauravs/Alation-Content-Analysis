@@ -68,7 +68,7 @@ def find_roles_in_text(text, roles):
 
 st.set_page_config(layout="wide")
 st.title("📄 Web Content and User Role Mapper")
-st.markdown("A two-step tool to first scrape web content and then map user roles to that content.")
+st.markdown("A two-step tool to first scrape web content and then map user roles and deployment type for each URL.")
 
 # --- Step 1: Scrape Content ---
 with st.expander("Step 1: Scrape Content from URLs", expanded=True):
@@ -157,3 +157,4 @@ if not df_to_display.empty:
     )
 else:
     st.write("Upload a file and click 'Scrape URLs' to generate a report.")
+
