@@ -37,6 +37,21 @@ def get_deployment_type_from_scraping(soup):
     if has_on_prem: return "Customer Managed"
     return ""
 
+def extract_main_content(soup):
+    """
+    Extracts the main textual content from the parsed HTML by looking for
+    <article>, <main>, or <body> tags.
+    """
+    if not soup:
+        return "Content Not Available"
+    # Prioritize more semantic tags first, falling back to the body
+    main_content = soup.find('article') or soup.find('main') or soup.body
+    if main_content:
+        # Get all text, using a space as a separator and stripping whitespace
+        return main_content.get_text(separator=' ', strip=True)
+    return "Main Content Not Found"
+
+
 # --- LLM Analysis Functions using Conversational API ---
 
 def call_llm_with_retry(client, prompt, max_tokens):
@@ -149,7 +164,7 @@ app_mode = st.sidebar.radio("Choose a Step", ["Step 1: Map Deployment Types", "S
 
 if app_mode == "Step 1: Map Deployment Types":
     st.header("Step 1: Map Deployment Types")
-    st.markdown("Upload a `.txt` file of URLs. This tool will scrape each URL for its deployment type, using an AI model for pages without clear tags. Download the resulting CSV to use in Step 2.")
+    st.markdown("Upload a `.txt` file of URLs. This tool will scrape each URL for its deployment type and main content, using an AI model for pages without clear tags. Download the resulting CSV to use in Step 2.")
     
     with st.sidebar:
         urls_file_step1 = st.file_uploader("Upload URLs File (.txt)", type="txt", key="step1_uploader")
@@ -165,9 +180,13 @@ if app_mode == "Step 1: Map Deployment Types":
                 soup, title = analyze_page_content(url)
                 if soup:
                     dtype = get_deployment_type_from_scraping(soup) or get_deployment_type_with_llm(client, soup)
-                    results.append({'Page Title': title, 'Page URL': url, 'Deployment Type': dtype})
+                    # **NEW**: Extract the main page content
+                    page_content = extract_main_content(soup)
+                    # **MODIFIED**: Add the new 'Page Content' column to the results
+                    results.append({'Page Title': title, 'Page URL': url, 'Deployment Type': dtype, 'Page Content': page_content})
                 else:
-                    results.append({'Page Title': title, 'Page URL': url, 'Deployment Type': 'Fetch Error'})
+                    # **MODIFIED**: Ensure the new column exists even on error
+                    results.append({'Page Title': title, 'Page URL': url, 'Deployment Type': 'Fetch Error', 'Page Content': 'Fetch Error'})
             
             st.session_state.report_df_step1 = pd.DataFrame(results)
             st.success("✅ Step 1 complete! You can now download the report.")
