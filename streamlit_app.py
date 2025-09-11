@@ -64,7 +64,7 @@ def find_items_in_text(text, items):
 # --- Streamlit UI ---
 st.set_page_config(layout="wide")
 st.title("📄 Web Content Mapper")
-st.markdown("A three-step tool to scrape web content and map user roles, deployment types, and identify relevant topics.")
+st.markdown("A three-step tool to scrape web content and map deployment types, user roles, and identify relevant topics.")
 
 with st.expander("Step 1: Map Deployment Type", expanded=True):
     urls_file_step1 = st.file_uploader("Upload URLs File (.txt)", key="step1")
@@ -148,4 +148,5 @@ if not df_to_display.empty:
     )
 else:
     st.write("Upload a file in Step 1 and click 'Scrape URLs' to generate a report.")
+
 
