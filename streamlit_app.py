@@ -36,12 +36,31 @@ def get_deployment_type_from_scraping(soup):
     return "Tag Not Found"
 
 def extract_main_content(soup):
-    """Extracts the main textual content from the parsed HTML."""
+    """
+    Extracts main content by finding a primary container and then removing
+    common non-essential elements like navs, headers, and footers before parsing text.
+    """
     if not soup:
         return "Content Not Available"
+
     main_content = soup.find('article') or soup.find('main') or soup.body
+    if not main_content:
+        return "Main Content Not Found"
+
+    # CRITICAL FIX: Find and remove common boilerplate elements BEFORE extracting text.
+    # This prevents keywords in navigation and footers from contaminating the content.
+    elements_to_remove = main_content.find_all(['nav', 'header', 'footer', 'aside'])
+    
+    # You can also add specific class names or IDs if you identify them
+    # Example: elements_to_remove.extend(main_content.find_all(id='sidebar'))
+    
+    for element in elements_to_remove:
+        element.decompose() # This surgically removes the tag and all its contents
+
+    # Now, get the text from the CLEANED content block
     if main_content:
         return main_content.get_text(separator=' ', strip=True)
+    
     return "Main Content Not Found"
 
 # --- Mapping Functions ---
@@ -79,7 +98,7 @@ def find_primary_functional_area(row, functional_areas):
     for area in functional_areas:
         for match in re.finditer(r'\b' + re.escape(area) + r'\b', title, re.IGNORECASE):
             if is_standalone_word(title, match):
-                return area # Immediately return the first one found
+                return area
 
     # Priority 2: Find the earliest occurring standalone match in the Page Content
     first_match = None
@@ -88,8 +107,6 @@ def find_primary_functional_area(row, functional_areas):
     for area in functional_areas:
         for match in re.finditer(r'\b' + re.escape(area) + r'\b', content, re.IGNORECASE):
             if is_standalone_word(content, match):
-                # If this is the very first match we've found, or if it appears
-                # earlier in the text than our previously saved match, update it.
                 if first_match is None or match.start() < first_match_position:
                     first_match_position = match.start()
                     first_match = area
