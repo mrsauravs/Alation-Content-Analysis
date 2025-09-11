@@ -59,9 +59,9 @@ def find_roles_in_text(text, roles):
 
 def find_primary_functional_area(row, functional_areas):
     """
-    Determines the single most important functional area by matching only standalone words.
-    Priority 1: Standalone word match in the Page Title.
-    Priority 2: Highest frequency of standalone word matches in the Page Content.
+    Determines the single most important functional area using a hybrid logic.
+    - General Rule: Matches only standalone words.
+    - Specific Exception: Excludes "Compose" if it is preceded by "Docker".
     """
     title = row.get('Page Title', '')
     content = row.get('Page Content', '')
@@ -69,36 +69,42 @@ def find_primary_functional_area(row, functional_areas):
     if not isinstance(content, str): content = ""
     if not isinstance(title, str): title = ""
 
-    # This helper function validates if a match is a standalone word
-    def is_standalone_word(text, match):
+    def is_valid_match(text, match, area):
         start_index = match.start()
         end_index = match.end()
         
-        # Check character before the match is whitespace, punctuation, or start of string
+        # 1. General Standalone Word Check
         is_start_valid = (start_index == 0) or (text[start_index - 1].isspace() or text[start_index - 1] in '(),."\'')
-        
-        # Check character after the match is whitespace, punctuation, or end of string
         is_end_valid = (end_index == len(text)) or (text[end_index].isspace() or text[end_index] in '(),."\'')
         
-        return is_start_valid and is_end_valid
+        if not (is_start_valid and is_end_valid):
+            return False
 
-    # Priority 1: Check the Page Title for a standalone word
+        # 2. Specific Exception for "Compose"
+        if area.lower() == 'compose':
+            preceding_text_start = max(0, start_index - 10) # Check 10 chars before
+            preceding_text = text[preceding_text_start:start_index]
+            if 'docker' in preceding_text.lower():
+                return False # Invalidate if "docker" is found nearby
+
+        return True
+
+    # Priority 1: Check the Page Title
     for area in functional_areas:
         for match in re.finditer(r'\b' + re.escape(area) + r'\b', title, re.IGNORECASE):
-            if is_standalone_word(title, match):
-                return area # Return the first valid standalone match
+            if is_valid_match(title, match, area):
+                return area
 
-    # Priority 2: Count frequency of standalone words in Page Content
+    # Priority 2: Count frequency in Page Content
     all_matches = []
     for area in functional_areas:
         for match in re.finditer(r'\b' + re.escape(area) + r'\b', content, re.IGNORECASE):
-            if is_standalone_word(content, match):
-                all_matches.append(area) # Only count valid, standalone words
+            if is_valid_match(content, match, area):
+                all_matches.append(area)
             
     if not all_matches:
         return "No Area Found"
         
-    # Find the most common valid match
     most_common_area = Counter(all_matches).most_common(1)[0][0]
     return most_common_area
 
@@ -108,7 +114,7 @@ st.set_page_config(layout="wide")
 st.title("📄 Web Content Analyzer and Mapper")
 st.markdown("A three-step tool to scrape web content, map user roles, and determine the primary functional area.")
 
-# --- Step 1: Scrape Content ---
+# Step 1: Scrape Content
 with st.expander("Step 1: Scrape Content from URLs", expanded=True):
     urls_file_step1 = st.file_uploader("Upload URLs File (.txt)", type="txt", key="step1_uploader")
     if st.button("🚀 Scrape URLs", type="primary"):
@@ -131,14 +137,13 @@ with st.expander("Step 1: Scrape Content from URLs", expanded=True):
                         'Deployment Type': 'Fetch Error', 'Page Content': 'Fetch Error'
                     })
             st.session_state.report_df = pd.DataFrame(results)
-            # Clear any old data from subsequent steps
             if 'mapped_roles_df' in st.session_state: del st.session_state.mapped_roles_df
             if 'final_df' in st.session_state: del st.session_state.final_df
             st.success("✅ Step 1 complete! You can now proceed to Step 2.")
         else:
             st.warning("⚠️ Please upload a URLs file to begin.")
 
-# --- Step 2: Map User Roles ---
+# Step 2: Map User Roles
 if 'report_df' in st.session_state:
     with st.expander("Step 2: Map User Roles to Scraped Content", expanded=True):
         roles_file_step2 = st.file_uploader("Upload User Roles File (.txt)", type="txt", key="step2_uploader")
@@ -149,14 +154,14 @@ if 'report_df' in st.session_state:
                     df_to_map = st.session_state.report_df.copy()
                     df_to_map['User Roles'] = df_to_map['Page Content'].apply(lambda text: find_roles_in_text(text, user_roles))
                     st.session_state.mapped_roles_df = df_to_map
-                    if 'final_df' in st.session_state: del st.session_state.final_df # Clear old final data
+                    if 'final_df' in st.session_state: del st.session_state.final_df
                     st.success("✅ Step 2 complete! You can now proceed to Step 3.")
                 else:
                     st.warning("⚠️ The roles file is empty.")
             else:
                 st.warning("⚠️ Please upload a user roles file.")
 
-# --- Step 3: Determine Functional Area ---
+# Step 3: Determine Functional Area
 if 'mapped_roles_df' in st.session_state:
     with st.expander("Step 3: Determine Primary Functional Area", expanded=True):
         fa_file_step3 = st.file_uploader("Upload Functional Areas File (.txt)", type="txt", key="step3_uploader")
@@ -173,7 +178,7 @@ if 'mapped_roles_df' in st.session_state:
             else:
                 st.warning("⚠️ Please upload a functional areas file.")
 
-# --- Display and Download Results ---
+# Display and Download Results
 st.markdown("---")
 st.subheader("📊 Results")
 
