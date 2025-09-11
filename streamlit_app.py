@@ -59,34 +59,46 @@ def find_roles_in_text(text, roles):
 
 def find_primary_functional_area(row, functional_areas):
     """
-    Determines the single most important functional area based on a priority system.
-    Priority 1: Match in the Page Title.
-    Priority 2: Highest frequency in the Page Content.
+    Determines the single most important functional area by matching only standalone words.
+    Priority 1: Standalone word match in the Page Title.
+    Priority 2: Highest frequency of standalone word matches in the Page Content.
     """
-    title = row['Page Title']
-    content = row['Page Content']
+    title = row.get('Page Title', '')
+    content = row.get('Page Content', '')
     
-    if not isinstance(content, str):
-        content = ""
-    if not isinstance(title, str):
-        title = ""
+    if not isinstance(content, str): content = ""
+    if not isinstance(title, str): title = ""
 
-    # Priority 1: Check the Page Title (case-insensitive, whole-word)
+    # This helper function validates if a match is a standalone word
+    def is_standalone_word(text, match):
+        start_index = match.start()
+        end_index = match.end()
+        
+        # Check character before the match is whitespace, punctuation, or start of string
+        is_start_valid = (start_index == 0) or (text[start_index - 1].isspace() or text[start_index - 1] in '(),."\'')
+        
+        # Check character after the match is whitespace, punctuation, or end of string
+        is_end_valid = (end_index == len(text)) or (text[end_index].isspace() or text[end_index] in '(),."\'')
+        
+        return is_start_valid and is_end_valid
+
+    # Priority 1: Check the Page Title for a standalone word
     for area in functional_areas:
-        if re.search(r'\b' + re.escape(area) + r'\b', title, re.IGNORECASE):
-            return area
+        for match in re.finditer(r'\b' + re.escape(area) + r'\b', title, re.IGNORECASE):
+            if is_standalone_word(title, match):
+                return area # Return the first valid standalone match
 
-    # Priority 2: Count frequency in Page Content if no title match
+    # Priority 2: Count frequency of standalone words in Page Content
     all_matches = []
     for area in functional_areas:
-        matches = re.findall(r'\b' + re.escape(area) + r'\b', content, re.IGNORECASE)
-        if matches:
-            all_matches.extend([area] * len(matches))
+        for match in re.finditer(r'\b' + re.escape(area) + r'\b', content, re.IGNORECASE):
+            if is_standalone_word(content, match):
+                all_matches.append(area) # Only count valid, standalone words
             
     if not all_matches:
         return "No Area Found"
         
-    # Use Counter to find the most common area from all matches
+    # Find the most common valid match
     most_common_area = Counter(all_matches).most_common(1)[0][0]
     return most_common_area
 
