@@ -1,31 +1,96 @@
-# URL to Deployment Type Mapper - Web Application
+# Web Content & AI Enrichment Streamlit App
 
-This repository contains a Streamlit web application that provides a reliable way to scrape a list of URLs and determine their deployment type based on specific HTML class labels. It is designed as the first step in a two-part content analysis workflow.
+This is a multi-step Streamlit application designed to scrape web content from a list of URLs, map predefined metadata, and use Large Language Models (LLMs) to intelligently enrich the data and fill in any gaps.
 
-## Purpose
+The tool provides a full workflow, from initial data scraping and rule-based mapping to advanced, AI-powered content analysis, culminating in a clean, enriched CSV file ready for further use.
 
-The primary goal of this application is to automate the deterministic task of identifying deployment types (Alation Cloud Service, Customer Managed, or both) for a large number of documentation pages.
-
-It generates a clean CSV report containing the Page Title, URL, and the correctly mapped Deployment Type. This report can then be used as a reliable input for a second-stage analysis, where an LLM like Google Gemini can be prompted to perform more complex tasks like keyword generation and contextual metadata mapping.
+---
 
 ## Features
 
-- User-Friendly Interface: A simple web UI for uploading files and running the analysis.
+* **Step 1: Scrape & Map Deployment Type**: Ingests a list of URLs from a `.txt` file, scrapes the page title and main body content, and maps a `Deployment Type`.
+* **Intelligent Scraping**: Automatically removes common boilerplate content like headers, footers, and navigation bars to ensure the analysis is performed only on the core article text.
+* **Step 2 & 3: Rule-Based Metadata Mapping**: Maps `User Roles` and `Topics` from user-provided `.txt` files to the scraped content.
+* **Step 4: AI-Powered Enrichment**: Connects to an LLM to:
+    * Intelligently fill in any blank cells for `Deployment Type`, `User Role`, or `Topics`.
+    * Generate a new `Functional Area` column by selecting the single most relevant term.
+    * Generate a new `Keywords` column with 20 unique, relevant technical keywords.
+* **Multi-Provider AI Support**: Includes a choice of AI providers for the enrichment step:
+    * Google Gemini
+    * OpenAI (GPT-4)
+    * Hugging Face (supports any text-generation model via the Inference API)
+* **Secure API Key Handling**: Uses password fields for the secure entry of API keys and tokens.
+* **Downloadable Report**: The final, enriched data can be downloaded as a CSV file.
 
-- Reliable Scraping: Uses a consistent method to fetch live page data and identify deployment labels.
+---
 
-- Batch Processing: Analyzes a list of URLs from a .txt file in a single run.
+## Setup and Installation
 
-- Downloadable Reports: Provides the results in a clean, downloadable CSV format.
+To run this application locally, you'll need Python 3.8+ and the libraries listed in `requirements.txt`.
 
-## How to Use the Deployed Application
+**1. Clone the repository:**
+```bash
+git clone <your-repository-url>
+cd <your-repository-directory>
 
-1. Prepare your URL file: Create a `.txt` file that contains the list of URLs you want to analyze. Each URL should be on a new line.
+**2. Create and activate a virtual environment (recommended):**
+```bash
+# For macOS/Linux
+python3 -m venv venv
+source venv/bin/activate
 
-2. Access the App: Open the public URL provided by Streamlit.
+```bash
+# For Windows
+python -m venv venv
+venv\Scripts\activate
 
-3. Upload the file: In the application's sidebar, click "Browse files" and select your .txt file.
+**3. Install the required dependencies:**
+```bash
+pip install -r requirements.txt
 
-4. Run the analysis: Click the "Map Deployment Types" button. The application will show a progress bar as it processes each URL.
+## How to Use
 
-5. Download the results: Once the analysis is complete, a table with the results will appear. Click the "Download Report as CSV" button to save the data for your next analysis step.
+### Launch the application:
+
+Run the following command in your terminal from the project's root directory:
+```bash
+streamlit run streamlit_app.py
+
+Your browser will open with the application running.
+
+### Follow the on-screen steps:
+
+  - Step 1: Map Deployment Type
+
+    1. Upload a `.txt` file containing the URLs you want to process (one URL per line).
+
+    2. Click **Scrape URLs**. The app will fetch the content for each URL.
+
+  - Step 2: Map User Roles
+
+    1. Upload a `.txt file` containing your list of user roles (one role per line).
+
+    2. Click **Map User Roles**.
+
+  - Step 3: Map Topics
+
+    1. Upload a `.txt file` containing your list of topics (one topic per line).
+
+    2. Click **Map Topics**.
+
+  - Step 4: Enrich Data with AI
+
+    1. Choose your preferred AI Provider from the dropdown menu.
+
+    2. Enter your API Key or Access Token in the secure text field.
+
+        - If you selected **Hugging Face**, you must also provide a **Model ID** (e.g., mistralai/Mistral-7B-Instruct-v0.2).
+
+    3. Click **Fill Blanks with AI**. The app will process each row and display the final, fully enriched table.
+
+### Download the report:
+
+Once the process is complete, click the **Download Report (CSV)** button to save the results.
+
+## License
+This project is licensed under the MIT License. See the LICENSE file for details.
