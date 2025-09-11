@@ -226,7 +226,7 @@ def enrich_data_with_ai(dataframe, api_key, provider, hf_model_id=None):
 
 # --- Streamlit UI ---
 st.set_page_config(layout="wide")
-st.title("📄 Web Content and Topic Mapper")
+st.title("📄 Web Content Mapper (AI Powered)")
 st.markdown("A four-step tool to scrape, map, and enrich content using AI.")
 
 # Initialize session state dataframes if they don't exist
@@ -345,3 +345,4 @@ if not df_to_show.empty:
     st.download_button("📥 Download Report (CSV)", csv_data, "enriched_report.csv", "text/csv")
 else:
     st.write("Upload a file in Step 1 to begin.")
+
