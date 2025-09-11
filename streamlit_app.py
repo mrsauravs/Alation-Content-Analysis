@@ -174,7 +174,7 @@ def process_ai_response(response_text, url):
 def call_gemini_api(api_key, prompt):
     """Calls the Google Gemini API."""
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     response = model.generate_content(prompt)
     return response.text
 
@@ -354,3 +354,4 @@ if not df_to_show.empty:
     st.download_button("📥 Download Report (CSV)", csv_data, "enriched_report.csv", "text/csv")
 else:
     st.write("Upload a file in Step 1 and click 'Scrape URLs' to generate a report.")
+
