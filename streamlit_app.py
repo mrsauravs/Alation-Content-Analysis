@@ -10,7 +10,6 @@ from openai import OpenAI
 from huggingface_hub import InferenceClient
 
 # --- MASTER PROMPT FOR LLMs ---
-# Updated with the detailed prompt you provided.
 MASTER_PROMPT = """
 You are an expert content analyst and data enrichment specialist.
 Your task is to process an attached CSV file containing a list of URLs and their partially mapped deployment types.
@@ -139,7 +138,20 @@ def is_standalone_word(text, match):
 def find_items_in_text(text, items):
     """Finds which items (roles, topics) from a list are present in the text."""
     if not isinstance(text, str): return ""
-    found_items = [item for item in items for match in re.finditer(r'\b' + re.escape(item) + r'\b', text, re.IGNORECASE) if is_standalone_word(text, match) and (item not in found_items)]
+    
+    # CORRECTED LOGIC: Use a standard for-loop to avoid the UnboundLocalError
+    found_items = []
+    for item in items:
+        # Optimization: if an item is already found, no need to search for it again
+        if item in found_items:
+            continue
+            
+        for match in re.finditer(r'\b' + re.escape(item) + r'\b', text, re.IGNORECASE):
+            if is_standalone_word(text, match):
+                found_items.append(item)
+                # Once found, break the inner loop to move to the next item
+                break
+                
     return ", ".join(found_items) if found_items else ""
 
 # --- AI Enrichment Functions ---
@@ -313,20 +325,27 @@ st.subheader("📊 Results")
 # Determine which dataframe to show and its final columns
 df_to_show = pd.DataFrame()
 final_columns = ['Page Title', 'Page URL', 'Deployment Type', 'User Role', 'Topics', 'Functional Area', 'Keywords']
-initial_columns = ['Page Title', 'Page URL', 'Deployment Type', 'User Roles', 'Topics']
+initial_columns = ['Page Title', 'Page URL', 'Deployment Type', 'User Roles', 'Topics'] # Note: 'User Roles' vs 'User Role'
 
-if not st.session_state.df4.empty:
+# Check for both 'User Role' and 'User Roles' for compatibility
+if 'User Roles' in st.session_state.get('df2', pd.DataFrame()).columns and 'User Role' not in st.session_state.get('df2', pd.DataFrame()).columns:
+    st.session_state.get('df2', pd.DataFrame()).rename(columns={'User Roles': 'User Role'}, inplace=True)
+if 'User Roles' in st.session_state.get('df3', pd.DataFrame()).columns and 'User Role' not in st.session_state.get('df3', pd.DataFrame()).columns:
+    st.session_state.get('df3', pd.DataFrame()).rename(columns={'User Roles': 'User Role'}, inplace=True)
+
+
+if 'df4' in st.session_state and not st.session_state.df4.empty:
     df_to_show = st.session_state.df4
     display_columns = [col for col in final_columns if col in df_to_show.columns]
-elif not st.session_state.df3.empty:
+elif 'df3' in st.session_state and not st.session_state.df3.empty:
     df_to_show = st.session_state.df3
-    display_columns = [col for col in initial_columns if col in df_to_show.columns]
-elif not st.session_state.df2.empty:
+    display_columns = [col for col in final_columns if col in df_to_show.columns]
+elif 'df2' in st.session_state and not st.session_state.df2.empty:
     df_to_show = st.session_state.df2
-    display_columns = [col for col in initial_columns if col in df_to_show.columns]
-elif not st.session_state.df1.empty:
+    display_columns = [col for col in final_columns if col in df_to_show.columns]
+elif 'df1' in st.session_state and not st.session_state.df1.empty:
     df_to_show = st.session_state.df1
-    display_columns = [col for col in initial_columns if col in df_to_show.columns]
+    display_columns = [col for col in final_columns if col in df_to_show.columns]
 
 
 if not df_to_show.empty:
