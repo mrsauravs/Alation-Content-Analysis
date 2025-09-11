@@ -2,4 +2,6 @@ streamlit
 pandas
 requests
 beautifulsoup4
-huggingface-hub
+google-generativeai
+openai
+huggingface_hub
